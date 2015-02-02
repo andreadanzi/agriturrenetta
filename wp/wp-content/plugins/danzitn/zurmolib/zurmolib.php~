@@ -35,9 +35,19 @@ class ApiRestHelper
         $response = curl_exec($handle);
         return $response;
     }
+    
+    
+    public static function createApiCallWithRelativeUrl($relativeUrl, $method, $headers, $data = array())
+    {
+        $baseUrl = $this->getBaseApiUrl();
+        $url = $baseUrl . $relativeUrl;
+        return ApiRestTestHelper::createApiCall($url, $method, $headers, $data);
+    }
+
+    
 }
 
-public function zurmo_login($zurmo_url,$username, $password)
+function zurmo_login($zurmo_url,$username, $password)
 {
     $headers = array(
         'Accept: application/json',
@@ -50,7 +60,7 @@ public function zurmo_login($zurmo_url,$username, $password)
 
     if ($response['status'] == 'SUCCESS')
     {
-        return $response['data'];
+        return $response;
     }
     else
     {

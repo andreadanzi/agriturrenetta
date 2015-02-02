@@ -35,9 +35,11 @@ class ApiRestHelper
         $response = curl_exec($handle);
         return $response;
     }
+        
+    
 }
 
-public function zurmo_login($zurmo_url,$username, $password)
+function zurmo_login($zurmo_url,$username, $password)
 {
     $headers = array(
         'Accept: application/json',
