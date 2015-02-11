@@ -77,19 +77,13 @@ $contactInputData = Array
 
 
 
+$zcl = new ZurmoClient($crm_url."/app/index.php",$crm_username, $crm_password,"contact");
 
-
-
-$ret_login = zurmo_login($crm_url."/app/index.php/zurmo/api/login",$crm_username, $crm_password);
+$ret_login = $zcl->login();
+// $ret_login = zurmo_login($crm_url."/app/index.php/zurmo/api/login",$crm_username, $crm_password);
 if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
     echo "Sei connesso!\n";
-    $authenticationData = $ret_login["data"];
-    $headers = array(
-        'Accept: application/json',
-        'ZURMO_SESSION_ID: ' . $authenticationData['sessionId'],
-        'ZURMO_TOKEN: ' . $authenticationData['token'],
-        'ZURMO_API_REQUEST_TYPE: REST',
-    );
+    $headers = $zcl->getLoginHeaders();
     
     $data = array(
         'dynamicSearch' => array(
@@ -108,11 +102,11 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
         ),
         'sort' => 'firstName.asc',
     );
-    
+    $response = $zcl->listFiltered($data);
     // Get first page of results
-    $response = ApiRestHelper::createApiCall($crm_url."/app/index.php/contacts/contact/api/list/filter/", 'POST', $headers, array('data' => $data));
+    // $response = ApiRestHelper::createApiCall($crm_url."/app/index.php/contacts/contact/api/list/filter/", 'POST', $headers, array('data' => $data));
     // leads differenza , a aprte url , è che leads ha array["state"]["id"]=1 mentre contatto array["state"]["id"]=5 $response = ApiRestHelper::createApiCall($crm_url."/app/index.php/leads/contact/api/list/filter/", 'POST', $headers, array('data' => $data));
-    $response = json_decode($response, true);
+    
     if ($response['status'] == 'SUCCESS')
     {
         // Do something with results
