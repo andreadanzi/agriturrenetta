@@ -5,18 +5,22 @@ echo "Test Zurmo Api\n";
 $crm_url = "http://localhost/zurmo";
 $crm_username = "super";
 $crm_password = "admin";
-$test_email = "a@example.com";
+$test_email = "ale.menapace20@gmail.com";
+$add_five_minutes = strtotime("+5 minutes");
+$startStamp = date("Y-m-d H:i:s");
+$endStamp =  date("Y-m-d H:i:s",$add_five_minutes);             
+
 $contactInputData = Array
     (
-        'firstName' => 'Michael',
-        'lastName' => 'Smith',
+        'firstName' => 'Michael C',
+        'lastName' => 'Smith C',
         'jobTitle' => 'President',
         'department' => 'Sales',
         'officePhone' => '653-235-7824',
         'mobilePhone' => '653-235-7821',
         'officeFax' => '653-235-7834',
         'description' => 'Some desc.',
-        'companyName' => 'Michael Co',
+        'companyName' => 'Michael Co CC',
         'website' => 'http://sample.com',
         'industry' => Array
             (
@@ -94,7 +98,7 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
                     'primaryEmail' =>  array('emailAddress' => $test_email),
                 ),
             ),
-            'dynamicStructure' => '1',
+            'dynamicStructure' => '1 AND 2',
         ),
         'pagination' => array(
             'page'     => 1,
@@ -114,8 +118,21 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
         {
             foreach ($response['data']['items'] as $item)
             {
-                print_r($item);
+                echo 'id = '. $item['id']. "\n";
+                echo 'primaryEmail = '. $item['primaryEmail']['emailAddress']. "\n";
+                echo 'account_id = '. $item['account']['id']. "\n";
+                echo 'firstName = '. $item['firstName']. "\n";
+                echo 'lastName = '. $item['lastName']. "\n";
+                echo 'companyName = '. $item['companyName']. "\n";
+                echo 'officePhone = '. $item['officePhone']. "\n";
                 echo "Contatto trovato!\n";
+                $event = array();
+                $event['subject']= "Subject Prova";
+                $event['description']= "Descr Prova";
+                $event['type']= "Web request";
+                $event['location']= "Web";
+                $newevent = create_event_for_entity($zcl,"contact",$item,$event);
+                echo "Evento creato!\n";
             }
         }
         else
@@ -138,10 +155,11 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
                 ),
                 'sort' => 'name.asc',
             );
-            
+            $zcl->setEntityType("account");
+            $response = $zcl->listFiltered($data);
             // Get first page of results
-            $response = ApiRestHelper::createApiCall($crm_url."/app/index.php/accounts/account/api/list/filter/", 'POST', $headers, array('data' => $data));
-            $response = json_decode($response, true);
+            // $response = ApiRestHelper::createApiCall($crm_url."/app/index.php/accounts/account/api/list/filter/", 'POST', $headers, array('data' => $data));
+            // $response = json_decode($response, true);
             if ($response['status'] == 'SUCCESS')    {
                 $account_id = -1;
                 // Do something with results
@@ -162,9 +180,10 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
                         'industry' => $contactInputData["industry"], 
                         'billingAddress' => $contactInputData["primaryAddress"]
                     );            
-                    $response = ApiRestHelper::createApiCall($crm_url.'/app/index.php/accounts/account/api/create/', 'POST', $headers, array('data' => $accdata));
-                    $response = json_decode($response, true);
-
+                    // $response = ApiRestHelper::createApiCall($crm_url.'/app/index.php/accounts/account/api/create/', 'POST', $headers, array('data' => $accdata));
+                    // $response = json_decode($response, true);
+                    
+                    $response = $zcl->create($accdata);
                     if ($response['status'] == 'SUCCESS')
                     {
                         $account_data = $response['data'];
@@ -182,11 +201,13 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
                     }
                     
                 }
+                
+                $zcl->setEntityType("contact");
                 $contactInputData['account']['id'] = $account_id;
                 $data = $contactInputData;
-                $response = ApiRestHelper::createApiCall($crm_url.'/app/index.php/contacts/contact/api/create/', 'POST', $headers, array('data' => $data));
-                $response = json_decode($response, true);
-
+                // $response = ApiRestHelper::createApiCall($crm_url.'/app/index.php/contacts/contact/api/create/', 'POST', $headers, array('data' => $data));
+                // $response = json_decode($response, true);
+                $response = $zcl->create($data);
                 if ($response['status'] == 'SUCCESS')
                 {
                     $contact = $response['data'];
