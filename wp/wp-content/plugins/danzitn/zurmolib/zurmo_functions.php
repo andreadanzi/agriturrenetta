@@ -3,7 +3,7 @@ include_once('zurmolib.php');
 
 
 
-function create_new_lead($client,$channel, $subject, $record) {
+function create_new_lead_2($client,$channel, $subject, $record) {
     $map_vt_lead_array = array(
                             'first_name'=>'firstname',
                             'last_name'=>'lastname',
@@ -41,7 +41,7 @@ function create_campaign_for_entity($client,$type,$record,$campaign) {
     $client->doInvoke("ws_entity_to_campaign",$type, $record['id'],"Campaigns",$campaign['id'], 'POST');
 }
 
-function create_event_for_entity($client,$type,$record,$event) {
+function create_event_for_entity_2($client,$type,$record,$event) {
     $assigned_user_id=$client->_userid;
     $date_start=date("Y-m-d");
     $due_date=date('Y-m-d',strtotime('+1 week', strtotime($date_start)));
@@ -80,68 +80,6 @@ function create_event_for_entity($client,$type,$record,$event) {
     
 }
 
-function find_entity_by_email($client, $email) {
-    $arr_res=array();
-    $ret_val = array("success"=>true,"result"=>array());
-    $query = "SELECT id, lastname, firstname, phone, contact_no, account_id FROM Contacts WHERE  email = '".$email."'";
-    $records = $client->doQuery($query);
-    $wasError = $client->lastError();
-    if($wasError) {
-        $arr_res['Contacts'][] = array('error'=>$wasError['message']);
-    } else {
-        if( $records ) {
-            foreach($records as $record) {
-                $arr_res['Contacts'][] = array(
-                                               'id'=>$record['id'],
-                                               'lastname'=>$record['lastname'],
-                                               'firstname'=>$record['firstname'],
-                                               'phone'=>$record['phone'],
-                                               'contact_no'=>$record['contact_no'],
-                                               'account_id'=>$record['account_id']
-                                               );
-            }
-        }
-    }
-    $query = "SELECT id, accountname, website, account_no FROM Accounts WHERE email1 = '".$email."'";
-    $records = $client->doQuery($query);
-    $wasError = $client->lastError();
-    if($wasError) {
-        $arr_res['Accounts'][] = array('error'=>$wasError['message']);
-    } else {
-        if( $records ) {
-            foreach($records as $record) {
-                $arr_res['Accounts'][] = array(
-                                               'id'=>$record['id'],
-                                               'accountname'=>$record['accountname'],
-                                               'website'=>$record['website'],
-                                               'phone'=>$record['phone'],
-                                               'account_no'=>$record['account_no']
-                                               );
-            }
-        }
-    }
-    $query = "SELECT id, lastname, firstname,company, phone, lead_no FROM Leads WHERE email = '".$email."'";
-    $records = $client->doQuery($query);
-    $wasError = $client->lastError();
-    if($wasError) {
-        $arr_res['Leads'][] = array('error'=>$wasError['message']);
-    } else {
-        if( $records ) {
-            foreach($records as $record) {
-                $arr_res['Leads'][] = array(
-                                               'id'=>$record['id'],
-                                               'lastname'=>$record['lastname'],
-                                               'firstname'=>$record['firstname'],
-                                               'company'=>$record['company'],
-                                               'phone'=>$record['phone'],
-                                               'lead_no'=>$record['lead_no']
-                                               );
-            }
-        }
-    }
-    $ret_val['result']=$arr_res;
-    return $ret_val;
-}
 
 
 ?>

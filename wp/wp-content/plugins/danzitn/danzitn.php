@@ -626,24 +626,25 @@ function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$
 	$crm_url = get_option('crm_url');
 	if( get_option('crm_enable') )
 	{
-		$ret_login = zurmo_login($crm_url,$crm_username, $crm_password);
+		$zcl = new ZurmoClient($crm_url,$crm_username, $crm_password,"contact");
+		$ret_login = $zcl->login();
 		if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
-			$client = $ret_login["result"];
 			$bFound = false;
-			$found_res = find_entity_by_email($client, $email);
-			// print_r($found_res);
-			if($found_res["success"] == true) {
-				foreach($found_res["result"] as $module_key=>$entities) {
+			$found_res = find_entity_by_email($zcl, $email);
+			if($found_res["status"] == 'SUCCESS') {
+				foreach($found_res["data"] as $module_key=>$entities) {
 					foreach($entities as $entity) {
-						create_event_for_entity($client,$module_key,$entity,$event);
+						create_event_for_entity($zcl,$module_key,$entity,$event);
 					}
 					$bFound = true;
 				}
 			}
 			if( !$bFound  ) {
-				$record_id = create_new_lead($client,$channel,$subject, $user_props);
-				if( isset($record_id) ) {
-					create_event_for_entity($client,"Leads",array("id"=>$record_id),$event);
+				$response = create_new_lead($zcl,$channel,$subject, $user_props);
+				if ($response["status"] == 'SUCCESS')
+				{
+				    $record_id = $response["data"]["id"];
+				    create_event_for_entity($zcl,"lead",array("id"=>$record_id),$event);
 				}
 			}
 		}
