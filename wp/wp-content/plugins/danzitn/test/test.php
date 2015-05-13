@@ -89,6 +89,36 @@ if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
     echo "Sei connesso!\n";
     $headers = $zcl->getLoginHeaders();
     
+    $found_res = find_entity_by_email($zcl,$test_email);
+    
+    if(  $found_res['status'] == 'SUCCESS' ) {
+        echo "success\n";
+        if(empty($found_res['data'])) {
+            // nothing found
+            echo "nothing found!\n";
+        } else {
+            // something's there
+            foreach ($found_res['data'] as $entity_type => $items)
+            {
+                echo $entity_type."\n";
+                foreach($items as $item) {
+                    echo 'id = '. $item['id']. "\n";
+                    echo 'primaryEmail = '. $item['primaryEmail']. "\n";
+                    $event = array();
+                    $event['subject']= "Subject Prova";
+                    $event['description']= "Descr Prova";
+                    $event['type']= "Web request";
+                    $event['location']= "Web";
+                    $newevent = create_event_for_entity($zcl,$entity_type,$item,$event);
+                    echo "Evento creato!\n";
+                }
+            }
+        }
+    } else {
+        echo "fail\n";
+        print_r($found_res);
+    }
+    die("STOOOP!\n");
     $data = array(
         'dynamicSearch' => array(
             'dynamicClauses' => array(

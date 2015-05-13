@@ -14,17 +14,54 @@ Tested up to: 3.6
 	License URI: http://www.gnu.org/licenses/gpl-3.0.html
 */
 
+// include for zurmo integration
 include_once( 'zurmolib/zurmolib.php' );
-include_once( 'zurmolib/zurmo_functions.php' );
+include_once( 'vtwsclib/vtwsclib.php' );
 
-global $wpdnz_options; // This is horrible, should be cleaned up at some point
+// global options for storing zurmo parameters. This is horrible, should be cleaned up at some point
+global $wpdnz_options;
 $wpdnz_options = array (
 	'crm_url' => 'http://crm.hostname.it',
 	'crm_username' => '',
 	'crm_password' => '',
-	'crm_enable'=>'false'
+	'crm_enable'=>'false',
+	'crm_enable_wp-members-profile_update'=>'false',
+	'crm_enable_wp-members-login'=>'false',
+	'crm_enable_wp-members-register'=>'false',
+	'crm_enable_cf7-sumbit'=>'false',
+	'crm_enable_download-monitor'=>'false',
+	'crm_backend'=>'vtiger',
 );
 
+if (!function_exists('danzitn_plugin_activate')) :
+function danzitn_plugin_activate() {
+
+    // Activation code here...
+}
+endif;
+register_activation_hook( __FILE__, 'danzitn_plugin_activate' );
+
+
+
+if (!function_exists('danzitn_plugin_deactivate')) :
+function danzitn_plugin_deactivate() {
+
+    // Activation code here...
+}
+endif;
+register_deactivation_hook( __FILE__, 'danzitn_plugin_deactivate' );
+
+
+
+if (!function_exists('wp_danzitn_activate')) :
+function wp_danzitn_activate() {
+
+    // Activation code here...
+}
+endif;
+
+
+// create required options
 if (!function_exists('wp_danzitn_activate_options')) :
 function wp_danzitn_activate_options() {
 	
@@ -38,6 +75,7 @@ function wp_danzitn_activate_options() {
 }
 endif;
 
+// create required options
 if (!function_exists('wp_danzitn_whitelist_options')) :
 function wp_danzitn_whitelist_options($whitelist_options) {
 	
@@ -72,39 +110,42 @@ function wp_danzitn_options_page() {
 	if (isset($_POST['wpdnz_action']) && $_POST['wpdnz_action'] == __('Send Test', 'wp_danzitn') && isset($_POST['crmappmail'])) {
 		
 		// Set up the mail variables
-		$event = array('type'=>'contact-form-7',
+		$event = array('type'=>'Web Site Contact Request',
 		       'subject'=>'test admin option page');
 		$crmappmail = $_POST['crmappmail'];
 		$crm_password = get_option('crm_password');
 		$crm_enable = get_option('crm_enable');
 		$crm_username = get_option('crm_username');
+		$crm_backend = get_option('crm_backend');
 		$crm_url = get_option('crm_url');
 		// performs login to crm app
-		$ret_login = zurmo_login($crm_url,$crm_username, $crm_password);
+		if($crm_backend == 'zurmo') $crmcl = new ZurmoClient($crm_url,$crm_username, $crm_password,"contact");
+		if($crm_backend == 'vtiger') $crmcl = new VtigerClient($crm_url,$crm_username, $crm_password);
+		$ret_login = $crmcl->login();
 		if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
-			$client = $ret_login["result"];
-			$out_result = "Login succedeed for ".$crm_username." with userid=".$client->_userid;
-			// search for an entity with the same e-mail entered by the user for testing purpouse
-			$found_res = find_entity_by_email($client, $crmappmail);
-			// print_r($found_res);
-			if($found_res["success"] == true) {
-				foreach($found_res["result"] as $module_key=>$entities) {
+			$out_result = "Login succedeed on ".$crm_backend." for ".$crm_username." with crm_username=".$crm_username;
+			if($crm_backend == 'zurmo') $found_res = find_zurmo_entity_by_email($crmcl, $crmappmail);
+			if($crm_backend == 'vtiger') $found_res = find_vtiger_entity_by_email($crmcl, $crmappmail);
+			if($found_res["status"] == 'SUCCESS') {
+				$bFound = false;
+				foreach($found_res["data"] as $module_key=>$entities) {
 					$out_result .= "<br/><strong>for " .$module_key."</strong>";
 					foreach($entities as $entity) {
 						foreach($entity as $key=>$val) {
 							$out_result .= "<br/>".$key." = " .$val;
 						}
-						$event['description'] = $out_result;
-						create_event_for_entity($client,$module_key,$entity,$event);
 					}
+					$bFound = true;
 				}
-				if( empty($found_res["result"]) ) $out_result .= " but nothing found!";
+				if( !$bFound  ) {
+					$out_result .= " but nothing found!";
+				}
 			} else {
-				$out_result .= " but searching for ".$crmappmail." failed, with message ".$found_res["result"];
+				$out_result .= " but searching for ".$crmappmail." failed, with message ".$found_res["errors"];
 			}
 		} else {
 			$out_result = "Login Failed";
-		}
+		}	
 		// Output the response
 		?>
 <div id="message" class="updated fade"><p><strong><?php _e('Test Message Sent', 'wp_danzitn'); ?></strong></p>
@@ -131,6 +172,11 @@ function wp_danzitn_options_page() {
 <span class="description"><?php _e('You can specify the url of your crm instalation.', 'wp_danzitn'); ?></span></td>
 </tr>
 <tr valign="top">
+<th scope="row"><label for="$crm_backend"><?php _e('CRM Backend', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_backend" type="text" id="crm_backend" value="<?php print(get_option('crm_backend')); ?>" size="40" class="regular-text" />
+<span class="description"><?php _e('You can specify your CRM platform, choose between vtiger an zurmo', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
 <th scope="row"><label for="$crm_username"><?php _e('CRM User Name', 'wp_danzitn'); ?></label></th>
 <td><input name="crm_username" type="text" id="crm_username" value="<?php print(get_option('crm_username')); ?>" size="40" class="regular-text" />
 <span class="description"><?php _e('You can specify the user name of your crm user.', 'wp_danzitn'); ?></span></td>
@@ -143,6 +189,31 @@ function wp_danzitn_options_page() {
 <tr valign="top">
 <th scope="row"><label for="crm_enable"><?php _e('CRM Enable Tracking', 'wp_danzitn'); ?></label></th>
 <td><input name="crm_enable" type="checkbox" id="crm_enable" value="true" <?php checked('true', get_option('crm_enable')); ?> />
+<span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
+<th scope="row"><label for="crm_enable_wp-members-profile_update"><?php _e('CRM Profile Update Tracking', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_enable_wp-members-profile_update" type="checkbox" id="crm_enable_wp-members-profile_update" value="true" <?php checked('true', get_option('crm_enable_wp-members-profile_update')); ?> />
+<span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
+<th scope="row"><label for="crm_enable_wp-members-login"><?php _e('CRM user Login Tracking', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_enable_wp-members-login" type="checkbox" id="crm_enable_wp-members-login" value="true" <?php checked('true', get_option('crm_enable_wp-members-login')); ?> />
+<span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
+<th scope="row"><label for="crm_enable_wp-members-register"><?php _e('CRM User Registration Tracking', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_enable_wp-members-register" type="checkbox" id="crm_enable_wp-members-register" value="true" <?php checked('true', get_option('crm_enable_wp-members-register')); ?> />
+<span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
+<th scope="row"><label for="crm_enable_cf7-sumbit"><?php _e('CRM CF7 Tracking', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_enable_cf7-sumbit" type="checkbox" id="crm_enable_cf7-sumbit" value="true" <?php checked('true', get_option('crm_enable_cf7-sumbit')); ?> />
+<span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
+</tr>
+<tr valign="top">
+<th scope="row"><label for="crm_enable_download-monitor"><?php _e('CRM Download Tracking', 'wp_danzitn'); ?></label></th>
+<td><input name="crm_enable_download-monitor" type="checkbox" id="crm_enable_download-monitor" value="true" <?php checked('true', get_option('crm_enable_download-monitor')); ?> />
 <span class="description"><?php _e('You can specify if enable event tracking.', 'wp_danzitn'); ?></span></td>
 </tr>
 </table>
@@ -182,68 +253,10 @@ function wp_danzitn_menus() {
 	
 	if (function_exists('add_submenu_page')) {
 		add_options_page(__('DanziTN CRM Options', 'wp_danzitn'),__('DNZ CRM', 'wp_danzitn'),'manage_options',__FILE__,'wp_danzitn_options_page');
-
-		add_submenu_page('users.php', 'DanziTN Emergency Password Reset', 'DNZ Password Reset', 'administrator', 'dnz_password_reset_main', 'dnz_password_reset_main' );
 	}
 	
 } // End of wp_danzitn_menus() function definition
 endif;
-
-
-if (!function_exists('dnz_password_reset_main')) :
-function dnz_password_reset_main() {
-	if(current_user_can('manage_options'))
-    	{
-        	global $wpdb;
-       		$wpdb->show_errors();
-		echo'<h2>DanziTN Password Reset</h2>';
-
-	 	if(!empty($_POST['emergency_accept']) && check_admin_referer('emergency_reset','emergency_reset'))
-		{
-		    echo'<p>Ok, si parte, 100 alla volta...</p>';
-		    $results=$wpdb->get_results("SELECT ID FROM ".$wpdb->prefix."users  
-			JOIN ".$wpdb->prefix."usermeta ON ".$wpdb->prefix."usermeta.user_id = ".$wpdb->prefix."users.id
-			AND ".$wpdb->prefix."usermeta.meta_key =  'dnz_notified' AND ".$wpdb->prefix."usermeta.meta_value =  'false'
-			WHERE user_login <> 'admin'
-			ORDER BY ID
-			LIMIT 0 , 100");
-		    if($results){
-			$ireset=0;
-			foreach($results AS $row) {
-				emergency_password_reset($row->ID);
-				update_user_meta( $row->ID, 'dnz_notified',  'true'  );
-				$ireset++;
-			}
-		    }
-		    echo '<h2>Fatto tutto ('.$ireset.' utenti resettati)</h2>';
-		}
-		else
-		{
-		    echo'<p><form action="" method="post">';
-		    echo wp_nonce_field('emergency_reset','emergency_reset');
-		    echo'<input type="hidden" name="emergency_accept" value="yes"/><input type="submit" value="Resetta tutte le password"/></form></p>';
-		}
-
-	}
-	else{echo"<p>Non hai i permessi per eseguire il reset delle password!</p>";}
-}
-endif;
-
-
-function emergency_password_reset($user_id)
-{
-    if(current_user_can('manage_options'))
-    {
-        $new_pass = wp_generate_password();
-        wp_set_password( $new_pass, $user_id );
-	$user = get_userdata( $user_id );
-	$message = '<p>Per la migrazione alla nuova piattaforma web abbiamo dovuto resettare la tua password di accesso a '.site_url().'<br/>Il tuo username è ancora <b>'.$user->user_login.'</b> , ma la tua nuova password è <b>'.$new_pass.'</b> Consigliamo di  accedere al sito per cambiarla.<br/> Non rispondere a questo messaggio in quanto generato automaticamente solo a scopo informativo. <br/>Grazie!</p><br/>***********************************<br/>';
-        $message .= '<p>For platform migration we have had to reset your password on '.site_url().'<br/>Your username is still <b>'.$user->user_login.'</b>, but your new password is <b>'.$new_pass.'</b><br/> Thanks.</p>';
-        // echo'<p>Password changed for '.$user->user_login.'</p>';
-        add_filter('wp_mail_content_type',create_function('', 'return "text/html";'));
-        wp_mail($user->user_email, 'Web Site - password reset',$message);
-    }
-}
 
 
 function wp_danzitn_action_links( $links, $file ) {
@@ -268,25 +281,15 @@ if (!defined('WPMS_ON') || !WPMS_ON) {
 	add_filter( 'plugin_action_links', 'wp_danzitn_action_links',10,2);
 }
 
-
-if (!function_exists('wpcff_flamingo_init')) :
-function wpcff_flamingo_init() {
-	if ( ! class_exists( 'Flamingo_Inbound_Message' ) )
-		return;
-
-	if ( ! term_exists( 'calculated-fields-form', Flamingo_Inbound_Message::channel_taxonomy ) ) {
-		wp_insert_term( __( 'Calculated Fields Form', 'wpcff' ),
-			Flamingo_Inbound_Message::channel_taxonomy,
-			array( 'slug' => 'calculated-fields-form' ) );
-	}
-}
-endif;
-add_action( 'flamingo_init', 'wpcff_flamingo_init');
-
+/* see action dlm_downloading, plugin Download Monitor required*/
 if (!function_exists('download_flamingo_init')) :
 function download_flamingo_init() {
     if ( ! class_exists( 'Flamingo_Inbound_Message' ) )
             return;
+	
+    if ( ! class_exists( 'DLM_Download' ) )
+            return;
+
     if ( ! term_exists( 'download-monitor', Flamingo_Inbound_Message::channel_taxonomy ) ) {
             wp_insert_term( __( 'Download Monitor', 'dwnld_mntr' ),
                     Flamingo_Inbound_Message::channel_taxonomy,
@@ -296,11 +299,15 @@ function download_flamingo_init() {
 endif;
 add_action( 'flamingo_init', 'download_flamingo_init' );
 
-/* see action wpmem_post_register_data */
+/* see action wpmem_post_register_data, plugin WP-Members required*/
 if (!function_exists('register_flamingo_init')) :
 function register_flamingo_init() {
     if ( ! class_exists( 'Flamingo_Inbound_Message' ) )
             return;
+    
+    if ( ! function_exists( 'wpmem' ) )
+            return;
+	
     if ( ! term_exists( 'wp-members-register', Flamingo_Inbound_Message::channel_taxonomy ) ) {
             wp_insert_term( __( 'Members Registration', 'wpmem_reg' ),
                     Flamingo_Inbound_Message::channel_taxonomy,
@@ -310,11 +317,15 @@ function register_flamingo_init() {
 endif;
 add_action( 'flamingo_init', 'register_flamingo_init' );
 
-/* see action danzitn_login wp_login on user.php*/
+/* see action danzitn_login wp_login on user.php,  plugin WP-Members required*/
 if (!function_exists('login_flamingo_init')) :
 function login_flamingo_init() {
     if ( ! class_exists( 'Flamingo_Inbound_Message' ) )
             return;
+
+    if ( ! function_exists( 'wpmem_login' )  )
+            return;
+
     if ( ! term_exists( 'wp-members-login', Flamingo_Inbound_Message::channel_taxonomy ) ) {
             wp_insert_term( __( 'Members Login', 'wpmem_login' ),
                     Flamingo_Inbound_Message::channel_taxonomy,
@@ -325,12 +336,18 @@ endif;
 add_action( 'flamingo_init', 'login_flamingo_init' );
 
 
-/*see action  wpmem_post_update_data and  password_reset on user.php*/
- 
+/*see action  wpmem_post_update_data and  password_reset on user.php, plugin WP-Members required*/
 if (!function_exists('profile_update_flamingo_init')) :
 function profile_update_flamingo_init() {
     if ( ! class_exists( 'Flamingo_Inbound_Message' ) )
             return;
+
+    if ( ! function_exists( 'wpmem_registration' )  )
+            return;
+    
+    if ( ! function_exists( 'wpmem_change_password' )  )
+            return;
+	    
     if ( ! term_exists( 'wp-members-profile_update', Flamingo_Inbound_Message::channel_taxonomy ) ) {
             wp_insert_term( __( 'Members Profile Update', 'wpmem_profile' ),
                     Flamingo_Inbound_Message::channel_taxonomy,
@@ -340,6 +357,7 @@ function profile_update_flamingo_init() {
 endif;
 add_action( 'flamingo_init', 'profile_update_flamingo_init' );
  
+ /* track downloads performed by registered users, plugin WP-Members required, plugin Download Monitor required */
 if (!function_exists('downloading_flamingo')) :
 function downloading_flamingo($download, $version, $file_path) {
     if ( ! class_exists( 'DLM_Download' ) )
@@ -399,63 +417,24 @@ function downloading_flamingo($download, $version, $file_path) {
         'from_name' => $name,
         'from_email' => $email,
         'fields' => $params ) );
-    // update_post_meta( $message_post->id, '_crm_enable', $params['crm_enable'] );
-    danzitn_add_crm_flamingo($channel,$subject, $email,$name,$params,$all_meta_for_user);
-        
+    if( get_option('crm_enable_download-monitor') ) danzitn_add_crm_flamingo("Web Site Download",$subject, $email,$name,$params,$all_meta_for_user);
+    dnz_log ( "downloading_flamingo terminated" );
 }
 endif;
 add_action( 'dlm_downloading', 'downloading_flamingo', 11,3);
 
-if (!function_exists('wpcff_flamingo_send_mail')) :
-function wpcff_flamingo_send_mail( $params,$myrows ) {
-	if ( ! ( class_exists( 'Flamingo_Contact' ) && class_exists( 'Flamingo_Inbound_Message' ) ) )
+if (!function_exists('danzitn_flamingo_before_submit')):
+function danzitn_flamingo_before_submit( $contactform, $result  ) {
+	dnz_log ( "starting danzitn_flamingo_before_submit " );
+	if ( ! ( class_exists( 'Flamingo_Contact' ) && class_exists( 'Flamingo_Inbound_Message' ) ) ) {
+		dnz_log ( "danzitn_flamingo_before_submit Flamingo classes missing" );
 		return;
-	
-	global $current_user;
-	get_currentuserinfo();
-	if ( empty( $params ) || empty( $current_user ) )
-		return;
-	
-	#$all_meta_for_user = array_map( function( $a ){ return $a[0]; }, get_user_meta( $current_user->ID ) );
-	$all_meta_for_user = get_user_meta( $current_user->ID );
-        $user_props = array(
-		'first_name' =>  $all_meta_for_user['first_name'],
-		'last_name' => $all_meta_for_user['last_name'] );
-	
-	$email = $current_user->user_email;
-	$name = $current_user->user_login;
-	$subject = "Calcolo " . $myrows["form_name"]. "  per " .$name;
-	$channel = "calculated-fields-form";
-		
-	Flamingo_Contact::add( array(
-		'email' => $email,
-		'name' => $name ,
-		'props' => $user_props,
-		'channel' => $channel ) );
-	
-        $params["email"] = $email;
-	$params['crm_enable'] = get_option('crm_enable');
-	$message_post = Flamingo_Inbound_Message::add( array(
-		'channel' => $channel,
-		'subject' => $subject,
-		'from' => trim( sprintf( '%s <%s>', $name, $email ) ),
-		'from_name' => $name,
-		'from_email' => $email,
-		'fields' => $params ) );
-	// update_post_meta( $message_post->id, '_crm_enable', $params['crm_enable'] );
-	danzitn_add_crm_flamingo($channel,$subject, $email,$name,$params,$all_meta_for_user);
-	
-}
-endif;
-add_action( 'wpcff_send_mail', 'wpcff_flamingo_send_mail', 11,2);
+	}
 
-if (!function_exists('danzitn_flamingo_before_send_mail')):
-function danzitn_flamingo_before_send_mail( $contactform ) {
-	if ( ! ( class_exists( 'Flamingo_Contact' ) && class_exists( 'Flamingo_Inbound_Message' ) ) )
+	if ( empty( $contactform ) ) {
+		dnz_log ( "danzitn_flamingo_before_submit empty contactform" );
 		return;
-
-	if ( empty( $contactform->posted_data ) || ! empty( $contactform->skip_mail ) )
-		return;
+	}
 
 	$fields_senseless = $contactform->form_scan_shortcode(
 		array( 'type' => array( 'captchar', 'quiz', 'acceptance' ) ) );
@@ -465,31 +444,42 @@ function danzitn_flamingo_before_send_mail( $contactform ) {
 	foreach ( $fields_senseless as $tag )
 		$exclude_names[] = $tag['name'];
 
-	$posted_data = $contactform->posted_data;
+	$submission = WPCF7_Submission::get_instance();
 
+	if ( ! $submission || ! $posted_data = $submission->get_posted_data() ) {
+		return;
+	}
+	
 	foreach ( $posted_data as $key => $value ) {
 		if ( '_' == substr( $key, 0, 1 ) || in_array( $key, $exclude_names ) )
 			unset( $posted_data[$key] );
 	}
+	dnz_log ( $posted_data );
+	
 	$user_props = array();
 	$email = isset( $posted_data['your-email'] ) ? trim( $posted_data['your-email'] ) : '';
-	$name = isset( $posted_data['your-name'] ) ? trim( $posted_data['your-name'] ) : '';
-	$last_name = isset( $posted_data['last_name'] ) ? trim( $posted_data['last_name'] ) : '';
+	$name = isset( $posted_data['nome'] ) ? trim( $posted_data['nome'] ) : '';
+	$telefono = isset( $posted_data['telefono'] ) ? trim( $posted_data['telefono'] ) : '';
+	$last_name = isset( $posted_data['your-name'] ) ? trim( $posted_data['your-name'] ) : '';
 	$subject = isset( $posted_data['your-subject'] ) ? trim( $posted_data['your-subject'] ) : '';
-	$radio_attivita = isset( $posted_data['radio-attivita'] ) ? trim( $posted_data['radio-attivita'] ) : '';
-	$company_name =  isset( $posted_data['company_name'] ) ? trim( $posted_data['company_name'] ) : '';
 	$city =  isset( $posted_data['city'] ) ? trim( $posted_data['city'] ) : '';
+	$data_arrivo = isset( $posted_data['data_arrivo'] ) ? trim( $posted_data['data_arrivo'] ) : '';
+	$numero_notti =  isset( $posted_data['numero_notti'] ) ? trim( $posted_data['numero_notti'] ) : '';
+	$your_message =  isset( $posted_data['your-message'] ) ? trim( $posted_data['your-message'] ) : '';
 	$user_props['first_name'] = $name;
 	$user_props['last_name'] = $last_name;
-	$user_props['user_email'] = $email;
 	$user_props['city'] = $city;
-	$user_props['company_name'] = $company_name;
-	$user_props['business_type'] = $radio_attivita=="Pubblica amministrazione"?"PA":$radio_attivita;
+	$user_props['user_email'] = $email;
+	$user_props['phone1'] = $telefono;
+	$user_props['richiesta'] = $subject;
+	$user_props['messaggio'] = $your_message;
 	$posted_data['crm_enable'] = get_option('crm_enable');
-	danzitn_add_crm_flamingo('contact-form-7',$subject, $email,$name,$posted_data,$user_props);
+	$subject = $subject;
+	if( get_option('crm_enable_cf7-sumbit') ) danzitn_add_crm_flamingo("Web Site Contact Request",$subject, $email,$name,$posted_data,$user_props);
+	dnz_log ( "danzitn_flamingo_before_submit terminated" );
 }
 endif;
-add_action( 'wpcf7_before_send_mail', 'danzitn_flamingo_before_send_mail',11,1 );
+add_action( 'wpcf7_submit', 'danzitn_flamingo_before_submit',11,2 );
 
 if (!function_exists('danzitn_post_register_data')) :
 function danzitn_post_register_data($fields) {
@@ -524,8 +514,8 @@ function danzitn_post_register_data($fields) {
 		'from_email' => $email,
 		'fields' => $fields ) );
 	
-	// update_post_meta( $message_post->id, '_crm_enable', $params['crm_enable'] );
-	danzitn_add_crm_flamingo($channel,$subject, $email,$name,$fields,$fields);
+	if( get_option('crm_enable_wp-members-register') ) danzitn_add_crm_flamingo("Web Site Registration",$subject, $email,$name,$fields,$fields);
+    dnz_log ( "danzitn_post_register_data terminated" );
 }
 endif;
 add_action( 'wpmem_post_register_data', 'danzitn_post_register_data');
@@ -562,8 +552,8 @@ function danzitn_login($user_login, $user) {
 		'from_name' => $name,
 		'from_email' => $email,
 		'fields' => $all_meta_for_user ) );
-	// update_post_meta( $message_post->id, '_crm_enable', $params['crm_enable'] );
-	danzitn_add_crm_flamingo($channel,$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+	if( get_option('crm_enable_wp-members-login') ) danzitn_add_crm_flamingo("Web Site Login",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+    dnz_log ( "danzitn_login terminated" );
 }
 endif;
 add_action( 'wp_login', 'danzitn_login',11,2);
@@ -605,50 +595,93 @@ function danzitn_pwdreset($parms) {
 		'from_name' => $name,
 		'from_email' => $email,
 		'fields' => $all_meta_for_user ) );
-	// update_post_meta( $message_post->id, '_crm_enable', $params['crm_enable'] );
-	danzitn_add_crm_flamingo($channel,$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+	if( get_option('crm_enable_wp-members-profile_update') ) danzitn_add_crm_flamingo("Web Site Profile Update",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+    dnz_log ( "danzitn_pwdreset terminated" );
 	return $parms;
 }
 endif;
 add_filter('wpmem_pwdreset_args','danzitn_pwdreset');
 // danzitn_profile_update channel wp-members-profile_update $arr = apply_filters( 'wpmem_pwdreset_args', array( 'user' => $_POST['user'], 'email' => $_POST['email'] ) );
 
+// manages flamingo events and inserts data into the CRM
 function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$user_props=array()) {
+	dnz_log( "strarting danzitn_add_crm_flamingo" );
+	dnz_log( "danzitn_add_crm_flamingo posted_data" );
+	dnz_log( $posted_data );
+	dnz_log( "danzitn_add_crm_flamingo user_props" );
+	dnz_log( $user_props );
 	$posted_description = "";
 	foreach($posted_data as $key=>$value){
 		$posted_description .= $key."=".$value."\n";
 	}
-	$event = array('type'=>$channel,
-		       'subject'=>$subject,
-		       'description'=>$posted_description);
 	$crm_password = get_option('crm_password');
 	$crm_username = get_option('crm_username');
+	$crm_backend = get_option('crm_backend');
 	$crm_url = get_option('crm_url');
 	if( get_option('crm_enable') )
 	{
-		$zcl = new ZurmoClient($crm_url,$crm_username, $crm_password,"contact");
-		$ret_login = $zcl->login();
+		if($crm_backend=="zurmo") $crmcl = new ZurmoClient($crm_url,$crm_username, $crm_password,"contact");
+		if($crm_backend=="vtiger") $crmcl = new VtigerClient($crm_url,$crm_username, $crm_password);
+		$ret_login = $crmcl->login();
 		if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
+			dnz_log( "danzitn_add_crm_flamingo ZurmoClient->login success" );
 			$bFound = false;
-			$found_res = find_entity_by_email($zcl, $email);
+			if($crm_backend=="zurmo") $found_res = find_zurmo_entity_by_email($crmcl, $email);
+			if($crm_backend=="vtiger") $found_res = find_vtiger_entity_by_email($crmcl, $email);
 			if($found_res["status"] == 'SUCCESS') {
-				foreach($found_res["data"] as $module_key=>$entities) {
+				foreach($found_res["data"] as $module_key=>$entities) {				
+					dnz_log( "danzitn_add_crm_flamingo email ". $email. " found for module " .$module_key );
 					foreach($entities as $entity) {
-						create_event_for_entity($zcl,$module_key,$entity,$event);
+						dnz_log( $entity );		
+						$event_subject = $subject;
+					    if( $module_key == "Contacts" ) $event_subject = $entity["lastName"] . " - " .$subject;
+                        if( $module_key == "Leads" )    $event_subject = $entity["lastName"] . " - " .$subject;
+                        if( $module_key == "Accounts" ) $event_subject = $entity["companyName"] . " - " .$subject;
+	                    $event = array('type'=>$channel,
+		                           'subject'=>$event_subject,
+		                           'location'=>'WWW',
+		                           'description'=>$posted_description);
+						// $evnt_ret = create_event_for_entity($crmcl,$module_key,$entity,$event);
+						if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,$module_key,$entity,$event);
+						if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,$module_key,$entity,$event);
+						dnz_log( $evnt_ret );
+						$bFound = true;
 					}
-					$bFound = true;
 				}
 			}
 			if( !$bFound  ) {
-				$response = create_new_lead($zcl,$channel,$subject, $user_props);
+				dnz_log( "danzitn_add_crm_flamingo email ". $email. " not found"  );
+				if($crm_backend=="zurmo") $response = create_new_zurmo_lead($crmcl,$channel,$subject, $user_props);
+				if($crm_backend=="vtiger") $response = create_new_vtiger_lead($crmcl,$channel,$subject, $user_props);
 				if ($response["status"] == 'SUCCESS')
 				{
+				    dnz_log( "danzitn_add_crm_flamingo email lead for email ". $email. " created"  );
+				    dnz_log( $response );
 				    $record_id = $response["data"]["id"];
-				    create_event_for_entity($zcl,"lead",array("id"=>$record_id),$event);
+				    $record = array();
+				    $record['companyName'] = $response["data"]["companyName"];
+				    $record['firstName'] = $response["data"]["firstName"];
+				    $record['lastName'] = $response["data"]["lastName"];
+				    $record['id'] = $response["data"]["id"];
+	                $event = array('type'=>$channel,
+		                       'subject'=>$record['lastName'] . " -" . $subject,
+		                       'location'=>'WWW',
+		                       'description'=>$posted_description);
+				    if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,"lead",$record,$event);
+				    if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,"Leads",$record,$event);
+				    dnz_log( $evnt_ret );
+				} else {
+				    dnz_log( "danzitn_add_crm_flamingo create_new_lead for email ". $email. " failed" );
+				    dnz_log( $response );
 				}
 			}
+		} else {
+			dnz_log( "danzitn_add_crm_flamingo login failed" );
 		}
+	} else {
+		dnz_log( "danzitn_add_crm_flamingo crm_enable is False" );
 	}
+	dnz_log( "danzitn_add_crm_flamingo terminated" );
 }
 
 if (!function_exists('custom_upload_mimes')) :
@@ -671,6 +704,16 @@ function dnz_update_flamingo_inbound_meta ($inbound_message_id) {
 }
 endif;
 add_action( "wp_insert_post", "dnz_update_flamingo_inbound_meta" );
+
+if (!function_exists('dnz_log')):
+function dnz_log ( $log )  {
+   if ( is_array( $log ) || is_object( $log ) ) {
+      error_log( "DNZ ". print_r( $log, 1 ),0 );
+   } else {
+      error_log( "DNZ ". $log,0 );
+   }
+}
+endif;
 
 
 

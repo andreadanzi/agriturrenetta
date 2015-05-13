@@ -44,7 +44,7 @@ class ZurmoClient
     
     function __construct($zurmo_url,$username, $password,$entitytype) {
         $this->zurmo_base_url = $zurmo_url; // http://localhost/zurmo/app/index.php
-        $this->entitytypes = array('account','contact','lead','meeting');
+        $this->entitytypes = array('account','contact','lead','meeting','task');
         if(in_array($entitytype,$this->entitytypes)) { 
             $this->entitytype = $entitytype;
             $this->zurmo_url = $zurmo_url;
@@ -126,6 +126,19 @@ class ZurmoClient
         return $response;
     }
     
+    public function getById($entityId)  {
+        $response = $this->createApiCallWithRelativeUrl('read/' . $entityId, 'GET');
+        // print_r($response );
+        $response = json_decode($response, true);    
+        $response_data = array();
+        if ($response['status'] == 'SUCCESS') {
+            $response_data = $response['data'];
+        } else {
+            $this->last_error = $response['errors'];
+        }
+        return $response;
+    }
+    
     public function create($entityData) {
         $response = $this->createApiCallWithRelativeUrl('create/', 'POST', array('data' => $entityData));
         $response = json_decode($response, true); 
@@ -140,7 +153,7 @@ class ZurmoClient
 }
 
 
-function create_new_lead($zcl,$channel, $subject, $record) {  
+function create_new_zurmo_lead($zcl,$channel, $subject, $record) {  
     $contactInputData = Array
     (
         'firstName' => $record['first_name'],
@@ -157,15 +170,20 @@ function create_new_lead($zcl,$channel, $subject, $record) {
                 'emailAddress' => $record['user_email'],
                 'optOut' => 1,
             ),
+        'state' => Array
+            (
+                'id' => 1
+            ),
     );
     $zcl->setEntityType("lead");
     return $zcl->create($contactInputData);
 }
 
-function find_entity_by_email($zcl, $email) {
-    $entity_types = array('lead', 'contact');
+function find_zurmo_entity_by_email($zcl, $email) {
+    $entity_types = array('lead', 'contact','account');
+    $status = 'SUCCESS'; 
     $arr_res = array();
-    $ret_val = array("status"=>'SUCCESS',"data"=>array(),"errors"=>array());
+    $arr_errors = array();
     $filterdata = array(
         'dynamicSearch' => array(
             'dynamicClauses' => array(
@@ -181,7 +199,7 @@ function find_entity_by_email($zcl, $email) {
             'page'     => 1,
             'pageSize' => 2,
         ),
-        'sort' => 'firstName.asc',
+        'sort' => 'id.asc',
     );
     foreach($entity_types as $entity_type) {
         $zcl->setEntityType($entity_type);
@@ -193,38 +211,50 @@ function find_entity_by_email($zcl, $email) {
             {
                 foreach ($response['data']['items'] as $item)
                 {
-                    $arr_res[$entity_type][] = array(
-                                                  'id'=>$item["id"],
-                                                  'firstName'=>$item['firstName'],
-                                                  'lastName'=>$item['lastName'],
-                                                  'account_id'=>$item['account']['id'],
-                                                  'companyName'=>$item['companyName'],
-                                                  'primaryEmail'=>$item['primaryEmail']['emailAddress'],
-                                                  'officePhone'=>$item['officePhone']
-                                                  );
+                    if($entity_type=="account") {
+                        $arr_res[$entity_type][] = array(
+                              'id'=>$item["id"],
+                              'industry'=>$item['industry']['value'],
+                              'billingAddress'=>$item['billingAddress'],
+                              'account_id'=>$item['id'],
+                              'companyName'=>$item['name'],
+                              'primaryEmail'=>$item['primaryEmail']['emailAddress'],
+                              'officePhone'=>$item['officePhone']
+                              );
+
+                    } else {
+                        $arr_res[$entity_type][] = array(
+                                                      'id'=>$item["id"],
+                                                      'firstName'=>$item['firstName'],
+                                                      'lastName'=>$item['lastName'],
+                                                      'primaryAddress'=>$item['primaryAddress'],
+                                                      'account_id'=>$item['account']['id'],
+                                                      'companyName'=>$item['companyName'],
+                                                      'primaryEmail'=>$item['primaryEmail']['emailAddress'],
+                                                      'officePhone'=>$item['officePhone']
+                                                      );
+                        }
                 }
             }
-            else
-            {
-                // echo "Nessun contatto rispecchia i criteri!\n";
-            }
         } else  {
-            if ($ret_val['status'] == 'SUCCESS') $ret_val["status"] = 'FAIL';        
-            $ret_val["errors"] = $response['errors'];
+            $status = 'FAIL';        
+            $arr_errors = $response['errors'];
         }
     }
-    return $ret_val["data"] = $arr_res;
+    return array("status"=>$status,"data"=>$arr_res,"errors"=>$arr_errors);
 }
 
 // $event['subject'] $event['description'] $event['type'] $event['location']
-function create_event_for_entity($zcl,$type,$record,$event) {
+function create_zurmo_event_for_entity($zcl,$type,$record,$event) {
     $remove_five_minutes = strtotime("-5 minutes");
-    $add_five_minutes = strtotime("+5 minutes");
+    $add_five_minutes = strtotime("+115 minutes");
     $startStamp = date("Y-m-d H:i:s", $remove_five_minutes);
     $endStamp =  date("Y-m-d H:i:s",$add_five_minutes);
+    $event_name = $event['subject'] . " - " . ( $type=='account' ? $record['companyName'] . "(".$type.")" : $record['lastName']. " " . $record['firstName'] . " (".$type.")");
+    $event_name = substr($event_name,0,64);
     $meetingInputData = Array
     (
-        'name' => $event['subject'] . " per " . $record['lastName']. " " . $record['firstName'] . " (".$type.")",
+        'name' => $event_name,
         'startDateTime' => $startStamp, // '2012-05-08 11:21:36',
         'endDateTime' => $endStamp,
         'location' =>  $event['location'], 
@@ -238,12 +268,43 @@ function create_event_for_entity($zcl,$type,$record,$event) {
                 array(
                     'action' => 'add', 
                     'modelId' =>$record["id"], 
-                    'modelClassName' => ucfirst($type)
+                    'modelClassName' => ucfirst( ( $type=='lead' ?'contact':$type) )
                 ),
             ),
         ),
     );
     $zcl->setEntityType('meeting');
+    return $zcl->create($meetingInputData);  
+}
+
+
+// $event['subject'] $event['description'] $event['type'] $event['location']
+function create_zurmo_task_for_entity($zcl,$type,$record,$event) {
+    $remove_five_minutes = strtotime("+5 minutes");
+    $add_sixtyfive_minutes = strtotime("+1 day");
+    $startStamp = date("Y-m-d H:i:s", $remove_five_minutes);
+    $endStamp =  date("Y-m-d H:i:s",$add_sixtyfive_minutes);
+    $event_name = $event['subject'] . " - " . ( $type=='account' ? $record['companyName'] . "(".$type.")" : $record['lastName']. " " . $record['firstName'] . " (".$type.")");
+    $description = $event_name . "\n";
+    $description .= $event['description'];
+    $event_name = substr($event_name,0,64);
+    $meetingInputData = Array
+    (
+        'name' => $event_name,
+        'dueDateTime' => $endStamp, // '2012-05-08 11:21:36',
+        'description' => $description ,
+        'status' => 1,
+        'modelRelations' => array(
+            'activityItems' => array(
+                array(
+                    'action' => 'add', 
+                    'modelId' =>$record["id"], 
+                    'modelClassName' => ucfirst( ( $type=='lead' ?'contact':$type) )
+                ),
+            ),
+        ),
+    );
+    $zcl->setEntityType('task');
     return $zcl->create($meetingInputData);  
 }
 
