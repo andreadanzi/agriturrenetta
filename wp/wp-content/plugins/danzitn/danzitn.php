@@ -628,7 +628,7 @@ function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$
 			$bFound = false;
 			if($crm_backend=="vtiger") {
                 $event = array('type'=>$channel,
-                                   'subject'=>$user_props['lastName'] . " -" . $subject,
+                                   'subject'=>$user_props['last_name'] . " - " . $subject,
                                    'location'=>'WWW',
                                    'description'=>$posted_description);
 			    $main_parms = array("contact"=>$user_props , "event"=>$event);
@@ -677,7 +677,7 @@ function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$
 				        $record['lastName'] = $response["data"]["lastName"];
 				        $record['id'] = $response["data"]["id"];
 	                    $event = array('type'=>$channel,
-		                           'subject'=>$record['lastName'] . " -" . $subject,
+		                           'subject'=>$record['lastName'] . " - " . $subject,
 		                           'location'=>'WWW',
 		                           'description'=>$posted_description);
 				        if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,"lead",$record,$event);
