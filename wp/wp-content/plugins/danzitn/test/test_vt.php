@@ -79,20 +79,40 @@ $event = array('type'=>'Custom Channel',
 	       'location'=>'location text',
 	       'description'=>'extended description');
 $vt_url = $crm_url;
+
+$record = array(
+                'first_name'=>'First Name ABCDE3',
+                'last_name'=>'Last Name ABCDE3',
+                'company_name'=>'Company ABCDE3',
+                'user_email'=>$test_email ,
+                'addr1'=>'via sommadossi',
+                'city'=>'CittA',
+                'thestate'=>'TN',
+                'country'=>'IT',
+                'zip'=>'38010',
+                'phone1'=>'+39 046356565',
+                'user_url'=>'www.cicciosilava.it',
+                'business_type'=>'Engineering',
+                'description'=>'Descrizione Estesa'
+);
+
+$main_parms = array("contact"=>$record , "event"=>$event);
+
 $client = new VtigerClient($vt_url,$crm_username, $crm_password);
 $checkLogin = $client->login();
 $out_result = "";
 if($checkLogin) {
   // converts like this {"type":"Custom Channel","subject":"subject text","location":"location text","description":"extended description"}
-  $evt_parmstr = $client->toParameterString($event);
+  $evt_parmstr = $client->toParameterString($main_parms);
   print_r($evt_parmstr );
   echo "\nConnessione sembra OK per ".$client->_userid."\n";
   $opParms = array(
                     "email"=>$test_email,
                     "element"=>$evt_parmstr ,
                     );
-  // $retOp = $client->doOperation("process_email",$opParms);
-  // print_r($retOp);
+  $retOp = $client->doOperation("process_email",$opParms);
+  print_r($retOp);
+  die("Fatto|");
   $found_res = find_vtiger_entity_by_email($client, $test_email);
     if($found_res["status"] == 'SUCCESS') {
 	    $bFound = false;
@@ -109,21 +129,6 @@ if($checkLogin) {
 	    }
 	    if( !$bFound  ) {
 		    $out_result .= " but nothing found!\n";
-		    $record = array(
-		                    'first_name'=>'First Name ABCDE3',
-                            'last_name'=>'Last Name ABCDE3',
-                            'company_name'=>'Company ABCDE3',
-                            'user_email'=>$test_email ,
-                            'addr1'=>'via sommadossi',
-                            'city'=>'CittA',
-                            'thestate'=>'TN',
-                            'country'=>'IT',
-                            'zip'=>'38010',
-                            'phone1'=>'+39 046356565',
-                            'user_url'=>'www.cicciosilava.it',
-                            'business_type'=>'Engineering',
-                            'description'=>'Descrizione Estesa'
-		    );
             $response = create_new_vtiger_lead($client,'Custom Channel', 'subject text', $record);
             print_r($response);
 
