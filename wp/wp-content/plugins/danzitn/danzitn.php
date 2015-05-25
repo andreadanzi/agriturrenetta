@@ -13,7 +13,7 @@ Tested up to: 3.6
 	License: GNU General Public License v3.0
 	License URI: http://www.gnu.org/licenses/gpl-3.0.html
 */
-
+// danzi.tn@20150525 added process_email for vtiger
 // include for zurmo integration
 include_once( 'zurmolib/zurmolib.php' );
 include_once( 'vtwsclib/vtwsclib.php' );
@@ -626,55 +626,69 @@ function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$
 		if(!empty($ret_login) && $ret_login['status'] == 'SUCCESS') {
 			dnz_log( "danzitn_add_crm_flamingo ZurmoClient->login success" );
 			$bFound = false;
-			if($crm_backend=="zurmo") $found_res = find_zurmo_entity_by_email($crmcl, $email);
-			if($crm_backend=="vtiger") $found_res = find_vtiger_entity_by_email($crmcl, $email);
-			if($found_res["status"] == 'SUCCESS') {
-				foreach($found_res["data"] as $module_key=>$entities) {				
-					dnz_log( "danzitn_add_crm_flamingo email ". $email. " found for module " .$module_key );
-					foreach($entities as $entity) {
-						dnz_log( $entity );		
-						$event_subject = $subject;
-					    if( $module_key == "Contacts" ) $event_subject = $entity["lastName"] . " - " .$subject;
-                        if( $module_key == "Leads" )    $event_subject = $entity["lastName"] . " - " .$subject;
-                        if( $module_key == "Accounts" ) $event_subject = $entity["companyName"] . " - " .$subject;
+			if($crm_backend=="vtiger") {
+                $event = array('type'=>$channel,
+                                   'subject'=>$user_props['lastName'] . " -" . $subject,
+                                   'location'=>'WWW',
+                                   'description'=>$posted_description);
+			    $main_parms = array("contact"=>$user_props , "event"=>$event);
+			    $opParms = array(
+                    "email"=>$email,
+                    "element"=>$crmcl->toParameterString($main_parms) ,
+                    );
+                $retOp = $crmcl->doOperation("process_email",$opParms);
+                dnz_log( $retOp );
+			} else if($crm_backend=="zurmo") {
+			
+			    $found_res = find_zurmo_entity_by_email($crmcl, $email);
+			    if($found_res["status"] == 'SUCCESS') {
+				    foreach($found_res["data"] as $module_key=>$entities) {				
+					    dnz_log( "danzitn_add_crm_flamingo email ". $email. " found for module " .$module_key );
+					    foreach($entities as $entity) {
+						    dnz_log( $entity );		
+						    $event_subject = $subject;
+					        if( $module_key == "Contacts" ) $event_subject = $entity["lastName"] . " - " .$subject;
+                            if( $module_key == "Leads" )    $event_subject = $entity["lastName"] . " - " .$subject;
+                            if( $module_key == "Accounts" ) $event_subject = $entity["companyName"] . " - " .$subject;
+	                        $event = array('type'=>$channel,
+		                               'subject'=>$event_subject,
+		                               'location'=>'WWW',
+		                               'description'=>$posted_description);
+						    // $evnt_ret = create_event_for_entity($crmcl,$module_key,$entity,$event);
+						    if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,$module_key,$entity,$event);
+						    if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,$module_key,$entity,$event);
+						    dnz_log( $evnt_ret );
+						    $bFound = true;
+					    }
+				    }
+			    }
+			    if( !$bFound  ) {
+				    dnz_log( "danzitn_add_crm_flamingo email ". $email. " not found"  );
+				    if($crm_backend=="zurmo") $response = create_new_zurmo_lead($crmcl,$channel,$subject, $user_props);
+				    if($crm_backend=="vtiger") $response = create_new_vtiger_lead($crmcl,$channel,$subject, $user_props);
+				    if ($response["status"] == 'SUCCESS')
+				    {
+				        dnz_log( "danzitn_add_crm_flamingo email lead for email ". $email. " created"  );
+				        dnz_log( $response );
+				        $record_id = $response["data"]["id"];
+				        $record = array();
+				        $record['companyName'] = $response["data"]["companyName"];
+				        $record['firstName'] = $response["data"]["firstName"];
+				        $record['lastName'] = $response["data"]["lastName"];
+				        $record['id'] = $response["data"]["id"];
 	                    $event = array('type'=>$channel,
-		                           'subject'=>$event_subject,
+		                           'subject'=>$record['lastName'] . " -" . $subject,
 		                           'location'=>'WWW',
 		                           'description'=>$posted_description);
-						// $evnt_ret = create_event_for_entity($crmcl,$module_key,$entity,$event);
-						if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,$module_key,$entity,$event);
-						if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,$module_key,$entity,$event);
-						dnz_log( $evnt_ret );
-						$bFound = true;
-					}
-				}
-			}
-			if( !$bFound  ) {
-				dnz_log( "danzitn_add_crm_flamingo email ". $email. " not found"  );
-				if($crm_backend=="zurmo") $response = create_new_zurmo_lead($crmcl,$channel,$subject, $user_props);
-				if($crm_backend=="vtiger") $response = create_new_vtiger_lead($crmcl,$channel,$subject, $user_props);
-				if ($response["status"] == 'SUCCESS')
-				{
-				    dnz_log( "danzitn_add_crm_flamingo email lead for email ". $email. " created"  );
-				    dnz_log( $response );
-				    $record_id = $response["data"]["id"];
-				    $record = array();
-				    $record['companyName'] = $response["data"]["companyName"];
-				    $record['firstName'] = $response["data"]["firstName"];
-				    $record['lastName'] = $response["data"]["lastName"];
-				    $record['id'] = $response["data"]["id"];
-	                $event = array('type'=>$channel,
-		                       'subject'=>$record['lastName'] . " -" . $subject,
-		                       'location'=>'WWW',
-		                       'description'=>$posted_description);
-				    if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,"lead",$record,$event);
-				    if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,"Leads",$record,$event);
-				    dnz_log( $evnt_ret );
-				} else {
-				    dnz_log( "danzitn_add_crm_flamingo create_new_lead for email ". $email. " failed" );
-				    dnz_log( $response );
-				}
-			}
+				        if($crm_backend=="zurmo") $evnt_ret = create_zurmo_task_for_entity($crmcl,"lead",$record,$event);
+				        if($crm_backend=="vtiger") $evnt_ret = create_vtiger_event_for_entity($crmcl,"Leads",$record,$event);
+				        dnz_log( $evnt_ret );
+				    } else {
+				        dnz_log( "danzitn_add_crm_flamingo create_new_lead for email ". $email. " failed" );
+				        dnz_log( $response );
+				    }
+			    }
+		    }
 		} else {
 			dnz_log( "danzitn_add_crm_flamingo login failed" );
 		}
