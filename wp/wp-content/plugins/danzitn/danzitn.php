@@ -614,7 +614,7 @@ add_filter('wpmem_pwdreset_args','danzitn_pwdreset');
 
 // manages flamingo events and inserts data into the CRM
 function danzitn_add_crm_flamingo($channel,$subject, $email,$name,$posted_data,$user_props=array()) {
-	dnz_log( "strarting danzitn_add_crm_flamingo" );
+	dnz_log( "starting danzitn_add_crm_flamingo" );
 	dnz_log( "danzitn_add_crm_flamingo posted_data" );
 	dnz_log( $posted_data );
 	dnz_log( "danzitn_add_crm_flamingo user_props" );
