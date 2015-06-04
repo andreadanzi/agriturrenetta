@@ -14,6 +14,7 @@ Tested up to: 3.6
 	License URI: http://www.gnu.org/licenses/gpl-3.0.html
 */
 // danzi.tn@20150525 added process_email for vtiger
+// danzi.tn@20150603 spostato tutto in wp_insert_post per prendere le informazioni da Flamingo_Inbound_Message...in modo che si possa fare poi con un batch 
 // include for zurmo integration
 include_once( 'zurmolib/zurmolib.php' );
 include_once( 'vtwsclib/vtwsclib.php' );
@@ -410,6 +411,10 @@ function downloading_flamingo($download, $version, $file_path) {
                     "email"=>$email
                     );
     $params['crm_enable'] = get_option('crm_enable');
+    $params['crm_processed'] = 0;
+    foreach ( $all_meta_for_user as $key => $value ) {
+        $params[$key] = $value;
+    }
     $message_post = Flamingo_Inbound_Message::add( array(
         'channel' => $channel,
         'subject' => $subject,
@@ -417,7 +422,7 @@ function downloading_flamingo($download, $version, $file_path) {
         'from_name' => $name,
         'from_email' => $email,
         'fields' => $params ) );
-    if( get_option('crm_enable_download-monitor') ) danzitn_add_crm_flamingo("Web Site Download",$subject, $email,$name,$params,$all_meta_for_user);
+    // if( get_option('crm_enable_download-monitor') ) danzitn_add_crm_flamingo("Web Site Download",$subject, $email,$name,$params,$all_meta_for_user);
     dnz_log ( "downloading_flamingo terminated" );
 }
 endif;
@@ -474,8 +479,9 @@ function danzitn_flamingo_before_submit( $contactform, $result  ) {
 	$user_props['richiesta'] = $subject;
 	$user_props['messaggio'] = $your_message;
 	$posted_data['crm_enable'] = get_option('crm_enable');
+    $posted_data['crm_processed'] = 0;
 	$subject = $subject;
-	if( get_option('crm_enable_cf7-sumbit') ) danzitn_add_crm_flamingo("Web Site Contact Request",$subject, $email,$name,$posted_data,$user_props);
+	// if( get_option('crm_enable_cf7-sumbit') ) danzitn_add_crm_flamingo("Web Site Contact Request",$subject, $email,$name,$posted_data,$user_props);
 	dnz_log ( "danzitn_flamingo_before_submit terminated" );
 }
 endif;
@@ -506,6 +512,7 @@ function danzitn_post_register_data($fields) {
 		'channel' => $channel ) ); 
 	
 	$fields['crm_enable'] = get_option('crm_enable');
+    $fields['crm_processed'] = 0;
 	$message_post = Flamingo_Inbound_Message::add( array(
 		'channel' => $channel,
 		'subject' => $subject,
@@ -514,7 +521,7 @@ function danzitn_post_register_data($fields) {
 		'from_email' => $email,
 		'fields' => $fields ) );
 	
-	if( get_option('crm_enable_wp-members-register') ) danzitn_add_crm_flamingo("Web Site Registration",$subject, $email,$name,$fields,$fields);
+	// if( get_option('crm_enable_wp-members-register') ) danzitn_add_crm_flamingo("Web Site Registration",$subject, $email,$name,$fields,$fields);
     dnz_log ( "danzitn_post_register_data terminated" );
 }
 endif;
@@ -545,6 +552,7 @@ function danzitn_login($user_login, $user) {
 		'channel' => $channel ) ); 
 	
 	$all_meta_for_user['crm_enable'] = get_option('crm_enable');
+    $all_meta_for_user['crm_processed'] = 0;
 	$message_post = Flamingo_Inbound_Message::add( array(
 		'channel' => $channel,
 		'subject' => $subject,
@@ -552,7 +560,7 @@ function danzitn_login($user_login, $user) {
 		'from_name' => $name,
 		'from_email' => $email,
 		'fields' => $all_meta_for_user ) );
-	if( get_option('crm_enable_wp-members-login') ) danzitn_add_crm_flamingo("Web Site Login",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+	// if( get_option('crm_enable_wp-members-login') ) danzitn_add_crm_flamingo("Web Site Login",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
     dnz_log ( "danzitn_login terminated" );
 }
 endif;
@@ -588,6 +596,7 @@ function danzitn_pwdreset($parms) {
 		'channel' => $channel ) ); 
 	
 	$all_meta_for_user['crm_enable'] = get_option('crm_enable');
+    $all_meta_for_user['crm_processed'] = 0;
 	$message_post = Flamingo_Inbound_Message::add( array(
 		'channel' => $channel,
 		'subject' => $subject,
@@ -595,7 +604,7 @@ function danzitn_pwdreset($parms) {
 		'from_name' => $name,
 		'from_email' => $email,
 		'fields' => $all_meta_for_user ) );
-	if( get_option('crm_enable_wp-members-profile_update') ) danzitn_add_crm_flamingo("Web Site Profile Update",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
+	// if( get_option('crm_enable_wp-members-profile_update') ) danzitn_add_crm_flamingo("Web Site Profile Update",$subject, $email,$name,$all_meta_for_user,$all_meta_for_user);
     dnz_log ( "danzitn_pwdreset terminated" );
 	return $parms;
 }
@@ -714,10 +723,58 @@ function dnz_update_flamingo_inbound_meta ($inbound_message_id) {
 	if ( 'flamingo_inbound' != $obj->post_type ) {
 	    return;
 	}
-	update_post_meta( $inbound_message_id, '_crm_enable', (get_option('crm_enable')=='true' ? 'true': 'false') );
+    $inbound_message = new Flamingo_Inbound_Message($obj);
+    if( $inbound_message instanceof Flamingo_Inbound_Message ) {
+        $subject = $inbound_message->subject;
+        $email = $inbound_message->from_email;
+        $name = $inbound_message->from_name;
+        $posted_data = $inbound_message->fields;
+        $channel = $inbound_message->channel;
+        wp_schedule_single_event( time() + 120, 'danzi_tn_single_event', array($inbound_message_id, $channel, $subject, $email,$name,$posted_data ) );
+        update_post_meta( $inbound_message_id, '_crm_enable', (get_option('crm_enable')=='true' ? 'true': 'false') );
+        update_post_meta( $inbound_message_id, '_crm_processed', 0 );
+    }
 }
 endif;
 add_action( "wp_insert_post", "dnz_update_flamingo_inbound_meta" );
+
+function do_danzitn_in_two_minutes( $inbound_message_id, $channel, $subject, $email,$name,$posted_data ) {
+    if( get_option('crm_enable_download-monitor') && $channel == "download-monitor" ) {
+        danzitn_add_crm_flamingo("Web Site Download",$subject, $email,$name,$posted_data,$posted_data);
+    }
+    if( get_option('crm_enable_cf7-sumbit') && $channel == "contact-form-7") {
+        $user_props = array();
+        $email = isset( $posted_data['your-email'] ) ? trim( $posted_data['your-email'] ) : '';
+        $name = isset( $posted_data['nome'] ) ? trim( $posted_data['nome'] ) : '';
+        $telefono = isset( $posted_data['telefono'] ) ? trim( $posted_data['telefono'] ) : '';
+        $last_name = isset( $posted_data['your-name'] ) ? trim( $posted_data['your-name'] ) : '';
+        $subject = isset( $posted_data['your-subject'] ) ? trim( $posted_data['your-subject'] ) : '';
+        $city =  isset( $posted_data['city'] ) ? trim( $posted_data['city'] ) : '';
+        $data_arrivo = isset( $posted_data['data_arrivo'] ) ? trim( $posted_data['data_arrivo'] ) : '';
+        $numero_notti =  isset( $posted_data['numero_notti'] ) ? trim( $posted_data['numero_notti'] ) : '';
+        $your_message =  isset( $posted_data['your-message'] ) ? trim( $posted_data['your-message'] ) : '';
+        $user_props['first_name'] = $name;
+        $user_props['last_name'] = $last_name;
+        $user_props['city'] = $city;
+        $user_props['user_email'] = $email;
+        $user_props['phone1'] = $telefono;
+        $user_props['richiesta'] = $subject;
+        $user_props['messaggio'] = $your_message;
+        danzitn_add_crm_flamingo("Web Site Contact Request",$subject, $email,$name,$posted_data,$user_props);
+    }
+    if( get_option('crm_enable_wp-members-register') && $channel == "wp-members-register" ) {
+        danzitn_add_crm_flamingo("Web Site Registration",$subject, $email,$name,$posted_data,$posted_data);
+    }
+    if( get_option('crm_enable_wp-members-profile_update') && $channel == "wp-members-profile_update" ) {
+        danzitn_add_crm_flamingo("Web Site Profile Update",$subject, $email,$name,$posted_data,$posted_data);
+    }
+    if( get_option('crm_enable_wp-members-login') && $channel == "wp-members-login" ) {
+        danzitn_add_crm_flamingo("Web Site Login",$subject, $email,$name,$posted_data,$posted_data);
+    }
+    update_post_meta( $inbound_message_id, '_crm_processed', 1 );
+}
+add_action( 'danzi_tn_single_event', 'do_danzitn_in_two_minutes', 10, 6 );
+
 
 if (!function_exists('dnz_log')):
 function dnz_log ( $log )  {
